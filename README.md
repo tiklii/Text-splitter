@@ -1,2 +1,2 @@
 # Text-splitter
-Splits text to feed into chatgpt for translation. Takes epub as input.
+Splits text. I use it to feed text into chatgpt.
