@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EPUB Text Chunker</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+    <script src="https://unpkg.com/epubjs/dist/epub.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        #tocContainer {
+            margin-bottom: 20px;
+            max-height: 300px;
+            overflow-y: scroll;
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        #tocContainer ul {
+            padding-left: 20px;
+        }
+
+        #tocContainer ul ul {
+            list-style-type: circle;
+        }
+
+        #tocContainer li {
+            cursor: pointer;
+            margin-bottom: 5px;
+        }
+
+        #tocContainer li.selected {
+            background-color: #007BFF;
+            color: white;
+            border-radius: 4px;
+            padding: 2px 5px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+            margin-bottom: 20px;
+            padding: 10px;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: vertical;
+            overflow-y: scroll;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .input-container {
+            margin-bottom: 20px;
+            margin-right: 20px; /* Space on the right of input fields */
+        }
+
+        .chunk-container {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+
+        .chunk-title {
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .copy-button {
+            padding: 5px 10px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            margin-right: 10px;
+        }
+
+        .copy-button.green {
+            background-color: #28a745;
+        }
+
+        .copy-button .tick {
+            display: none;
+            margin-left: 5px;
+            font-size: 16px;
+        }
+
+        .copy-button.green .tick {
+            display: inline-block;
+        }
+
+        #chunkedTextContainer {
+            margin-top: 30px;
+        }
+
+        .error-message {
+            color: red;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>EPUB Text Chunker</h1>
+    <p>Upload an EPUB, TXT, MD, or extension-less file to split its content into chunks:</p>
+
+    <input type="file" id="fileInput" accept=".epub,.txt,.md,*">
+
+    <div id="tocContainer">
+        <label>Table of Contents:</label>
+        <ul id="tocList"></ul>
+    </div>
+
+    <textarea id="chapterContent" placeholder="Paste text..."></textarea>
+
+    <div class="error-message" id="errorMessage"></div>
+
+    <div class="input-container">
+        <label for="maxChars">Max characters per chunk:</label>
+        <input type="number" id="maxChars" value="1400">
+    </div>
+
+    <div class="input-container">
+        <label for="addToTop">Add to top of each chunk:</label>
+        <textarea id="addToTop" placeholder="Text to add to the top of each chunk (use $X for part number, $Y for total parts)..."></textarea>
+    </div>
+
+    <div class="input-container">
+        <label for="addToBottom">Add to bottom of each chunk:</label>
+        <textarea id="addToBottom" placeholder="Text to add to the bottom of each chunk (use $X for part number, $Y for total parts)..."></textarea>
+    </div>
+
+    <div class="input-container">
+        <label>
+            <input type="checkbox" id="showTagsCheckbox"> Show content from particular tags
+        </label>
+    </div>
+
+    <button onclick="chunkText()">Split Text</button>
+
+    <div id="chunkedTextContainer"></div>
+
+    <script>
+        let book;
+        let lastClickedButton = null;
+        const allowedTags = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'blockquote'];
+
+        document.getElementById('fileInput').addEventListener('change', async function (event) {
+            const file = event.target.files[0];
+            const errorMessageElement = document.getElementById('errorMessage');
+            errorMessageElement.textContent = ''; // Clear previous errors
+
+            if (!file) {
+                errorMessageElement.textContent = 'No file selected!';
+                return;
+            }
+
+            const fileExtension = file.name.split('.').pop().toLowerCase();
+
+            // Handle EPUB files
+            if (fileExtension === 'epub') {
+                book = ePub(file);
+                const toc = await book.loaded.navigation;
+                const tocList = document.getElementById('tocList');
+                tocList.innerHTML = '';
+
+                function addTocItems(items, parentElement) {
+                    items.forEach(item => {
+                        const li = document.createElement('li');
+                        li.textContent = item.label.trim();
+                        li.dataset.href = item.href;
+                        li.addEventListener('click', loadChapter);
+                        parentElement.appendChild(li);
+
+                        if (item.subitems && item.subitems.length > 0) {
+                            const ul = document.createElement('ul');
+                            addTocItems(item.subitems, ul);
+                            li.appendChild(ul);
+                        }
+                    });
+                }
+
+                addTocItems(toc, tocList);
+                return;
+            }
+
+            // Handle TXT, MD, and extension-less files
+            if (['txt', 'md', ''].includes(fileExtension)) {
+                const fileText = await file.text();
+                if (!fileText.trim()) {
+                    errorMessageElement.textContent = 'The selected file does not contain valid text!';
+                    return;
+                }
+                document.getElementById('chapterContent').value = fileText;
+                return;
+            }
+
+            // Unsupported file type
+            errorMessageElement.textContent = 'Unsupported file type! Please upload an EPUB, TXT, MD, or extension-less file.';
+        });
+
+        async function loadChapter(event) {
+            const tocListItems = document.querySelectorAll('#tocList li');
+            tocListItems.forEach(item => item.classList.remove('selected'));
+            event.target.classList.add('selected');
+
+            const selectedHref = event.target.dataset.href;
+            const chapter = await book.load(selectedHref);
+            const chapterText = extractText(chapter);
+            document.getElementById('chapterContent').value = chapterText;
+        }
+
+        function extractText(chapterDocument) {
+            let text = "";
+            const showTags = document.getElementById('showTagsCheckbox').checked;
+
+            if (showTags) {
+                const elements = chapterDocument.querySelectorAll(allowedTags.join(', '));
+                elements.forEach(element => {
+                    text += element.innerText + '\n\n';
+                });
+            } else {
+                text = chapterDocument.body.innerText;
+            }
+
+            return text.trim();
+        }
+
+        function chunkText() {
+            const text = document.getElementById('chapterContent').value;
+            const maxChars = parseInt(document.getElementById('maxChars').value);
+            const addToTop = document.getElementById('addToTop').value.trim();
+            const addToBottom = document.getElementById('addToBottom').value.trim();
+
+            const paragraphs = text.split('\n\n');
+            const chunks = [];
+            let currentChunk = "";
+
+            for (const paragraph of paragraphs) {
+                if ((currentChunk.length + paragraph.length + 2) <= maxChars) {
+                    currentChunk += paragraph + '\n\n';
+                } else {
+                    chunks.push(currentChunk.trim());
+                    currentChunk = paragraph + '\n\n';
+                }
+            }
+
+            if (currentChunk.trim()) {
+                chunks.push(currentChunk.trim());
+            }
+
+            const totalChunks = chunks.length;
+            const chunkedTextContainer = document.getElementById('chunkedTextContainer');
+            chunkedTextContainer.innerHTML = '';
+
+            const digits = String(totalChunks).length;
+
+            chunks.forEach((chunk, index) => {
+                const partNumber = String(index + 1).padStart(digits, '0');
+                let finalChunk = (addToTop.replace('$X', partNumber).replace('$Y', totalChunks) + '\n\n' + chunk + '\n\n' + addToBottom.replace('$X', partNumber).replace('$Y', totalChunks)).trim();
+
+                const chunkContainer = document.createElement('div');
+                chunkContainer.classList.add('chunk-container');
+
+                const chunkTitle = document.createElement('div');
+                chunkTitle.classList.add('chunk-title');
+                chunkTitle.textContent = `Part ${partNumber}`;
+
+                const chunkTextarea = document.createElement('textarea');
+                chunkTextarea.value = finalChunk;
+                chunkTextarea.readOnly = true;
+
+                const copyButton = document.createElement('button');
+                copyButton.classList.add('copy-button');
+                copyButton.innerHTML = 'Copy to Clipboard<span class="tick">✔️</span>';
+                copyButton.addEventListener('click', function () {
+                    copyToClipboard(chunkTextarea.value);
+                    updateButtonState(copyButton);
+                });
+
+                chunkContainer.appendChild(chunkTitle);
+                chunkContainer.appendChild(chunkTextarea);
+                chunkContainer.appendChild(copyButton);
+                chunkedTextContainer.appendChild(chunkContainer);
+            });
+        }
+
+        function copyToClipboard(text) {
+            const hiddenInput = document.createElement('textarea');
+            hiddenInput.value = text;
+            document.body.appendChild(hiddenInput);
+            hiddenInput.select();
+            try {
+                document.execCommand('copy');
+            } catch (err) {
+                console.error('Copy to clipboard failed:', err);
+            }
+
+            document.body.removeChild(hiddenInput);
+        }
+
+        function updateButtonState(clickedButton) {
+            if (lastClickedButton) {
+                lastClickedButton.classList.remove('green');
+            }
+            clickedButton.classList.add('green');
+            lastClickedButton = clickedButton;
+        }
+    </script>
+</body>
+</html>
+
