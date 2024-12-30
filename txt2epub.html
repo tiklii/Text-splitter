@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TXT to EPUB Converter (EPUB 2)</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      font-weight: bold;
+    }
+    input, button {
+      padding: 10px;
+      font-size: 16px;
+      width: 100%;
+    }
+    button {
+      cursor: pointer;
+      background-color: #007BFF;
+      color: white;
+      border: none;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .debug-output {
+      margin-top: 20px;
+      padding: 10px;
+      background-color: #f9f9f9;
+      border: 1px solid #ddd;
+      font-family: monospace;
+      white-space: pre-wrap;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>TXT to EPUB Converter (EPUB 2)</h1>
+  <form id="epubForm">
+    <div class="form-group">
+      <label for="upload">Upload your TXT file:</label>
+      <input type="file" id="upload" accept=".txt" required>
+    </div>
+    <div class="form-group">
+      <label for="fileName">File Name (without extension):</label>
+      <input type="text" id="fileName" placeholder="Enter file name">
+    </div>
+    <div class="form-group">
+      <label for="epubTitle">EPUB Title:</label>
+      <input type="text" id="epubTitle" placeholder="Enter EPUB title">
+    </div>
+    <div class="form-group">
+      <label for="epubAuthor">EPUB Author:</label>
+      <input type="text" id="epubAuthor" placeholder="Enter EPUB author">
+    </div>
+    <button type="button" id="convert">Convert to EPUB</button>
+  </form>
+  <div id="debugOutput" class="debug-output"></div>
+
+  <script>
+    document.getElementById('upload').addEventListener('change', function () {
+      const file = this.files[0];
+      if (file) {
+        const fileNameWithoutExtension = file.name.replace(/\.[^/.]+$/, "");
+        document.getElementById('fileName').value = fileNameWithoutExtension;
+
+        // Read file to extract title and author information if available
+        const reader = new FileReader();
+        reader.onload = function (event) {
+          const content = event.target.result;
+          const firstPart = content.split(/\n\s*\n/)[0]; // First chapter or informational part
+          const titleMatch = firstPart.match(/《([^》]+)》/); // Match text between 《 and 》
+          const authorMatch = firstPart.match(/作者：([^\n]+)/); // Match "作者：" followed by text
+
+          if (titleMatch) {
+            document.getElementById('epubTitle').value = titleMatch[1];
+          }
+          if (authorMatch) {
+            document.getElementById('epubAuthor').value = authorMatch[1];
+          }
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    document.getElementById('convert').addEventListener('click', function () {
+      const uploadElement = document.getElementById('upload');
+      const fileNameElement = document.getElementById('fileName');
+      const epubTitleElement = document.getElementById('epubTitle');
+      const epubAuthorElement = document.getElementById('epubAuthor');
+      const debugOutput = document.getElementById('debugOutput');
+
+      if (!uploadElement.files.length) {
+        alert("Please upload a TXT file.");
+        return;
+      }
+
+      const file = uploadElement.files[0];
+      const fileName = fileNameElement.value || "output";
+      const epubTitle = epubTitleElement.value || "Untitled";
+      const epubAuthor = epubAuthorElement.value || "Unknown Author";
+
+      const reader = new FileReader();
+
+      reader.onload = function (event) {
+        const textContent = event.target.result;
+        const chapters = textContent.split(/\n\s*\n/); // Split by empty lines (assumes chapters are separated by double newlines)
+
+        const zip = new JSZip();
+        zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
+
+        const metaInfFolder = zip.folder("META-INF");
+        metaInfFolder.file("container.xml", `
+          <?xml version="1.0" encoding="UTF-8"?>
+          <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+            <rootfiles>
+              <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+            </rootfiles>
+          </container>
+        `.trim());
+
+        const oebpsFolder = zip.folder("OEBPS");
+        const textFolder = oebpsFolder.folder("Text");
+        const manifestItems = [];
+        const spineItems = [];
+        const tocEntries = [];
+
+        chapters.forEach((chapter, index) => {
+          const lines = chapter.trim().split("\n"); // Split chapter into lines
+          const chapterTitle = lines[0]; // First line is the chapter title
+          const chapterContent = lines.slice(1).join("\n"); // Remaining lines are the content
+          const chapterFileName = `chapter_${index + 1}.xhtml`;
+
+          textFolder.file(chapterFileName, `
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE html>
+            <html xmlns="http://www.w3.org/1999/xhtml">
+            <head>
+              <title>${chapterTitle}</title>
+            </head>
+            <body>
+              <h1>${chapterTitle}</h1>
+              <p>${chapterContent.replace(/\n/g, "</p><p>")}</p>
+            </body>
+            </html>
+          `.trim());
+
+          manifestItems.push(`<item id="chapter_${index + 1}" href="Text/${chapterFileName}" media-type="application/xhtml+xml"/>`);
+          spineItems.push(`<itemref idref="chapter_${index + 1}"/>`);
+          tocEntries.push(`
+            <navPoint id="navpoint-${index + 1}" playOrder="${index + 1}">
+              <navLabel><text>${chapterTitle}</text></navLabel>
+              <content src="Text/${chapterFileName}"/>
+            </navPoint>
+          `);
+        });
+
+        oebpsFolder.file("content.opf", `
+          <?xml version="1.0" encoding="UTF-8"?>
+          <package xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid" version="2.0">
+            <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+              <dc:title>${epubTitle}</dc:title>
+              <dc:creator>${epubAuthor}</dc:creator>
+              <dc:language>en</dc:language>
+              <dc:identifier id="bookid">urn:uuid:${crypto.randomUUID()}</dc:identifier>
+            </metadata>
+            <manifest>
+              <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+              ${manifestItems.join("\n")}
+            </manifest>
+            <spine toc="ncx">
+              ${spineItems.join("\n")}
+            </spine>
+          </package>
+        `.trim());
+
+        oebpsFolder.file("toc.ncx", `
+          <?xml version="1.0" encoding="UTF-8"?>
+          <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+            <head>
+              <meta name="dtb:uid" content="urn:uuid:${crypto.randomUUID()}"/>
+              <meta name="dtb:depth" content="1"/>
+              <meta name="dtb:totalPageCount" content="0"/>
+              <meta name="dtb:maxPageNumber" content="0"/>
+            </head>
+            <docTitle><text>${epubTitle}</text></docTitle>
+            <navMap>
+              ${tocEntries.join("\n")}
+            </navMap>
+          </ncx>
+        `.trim());
+
+        // Generate the EPUB file
+        zip.generateAsync({ type: "blob" }).then(function (blob) {
+          const downloadLink = document.createElement("a");
+          downloadLink.href = URL.createObjectURL(blob);
+          downloadLink.download = `${fileName}.epub`;
+          downloadLink.click();
+
+          debugOutput.textContent = "EPUB generated successfully.\nChapters:\n" + chapters.map((chapter, index) => `Chapter ${index + 1}: ${chapter.split("\n")[0]}`).join("\n");
+        });
+      };
+
+      reader.readAsText(file);
+    });
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</body>
+</html>
