@@ -71,13 +71,12 @@
         const fileNameWithoutExtension = file.name.replace(/\.[^/.]+$/, "");
         document.getElementById('fileName').value = fileNameWithoutExtension;
 
-        // Read file to extract title and author information if available
         const reader = new FileReader();
         reader.onload = function (event) {
           const content = event.target.result;
-          const firstPart = content.split(/\n\s*\n/)[0]; // First chapter or informational part
-          const titleMatch = firstPart.match(/《([^》]+)》/); // Match text between 《 and 》
-          const authorMatch = firstPart.match(/作者：([^\n]+)/); // Match "作者：" followed by text
+          const firstPart = content.split(/\n\s*\n/)[0];
+          const titleMatch = firstPart.match(/《([^》]+)》/);
+          const authorMatch = firstPart.match(/作者：([^\n]+)/);
 
           if (titleMatch) {
             document.getElementById('epubTitle').value = titleMatch[1];
@@ -111,7 +110,7 @@
 
       reader.onload = function (event) {
         const textContent = event.target.result;
-        const chapters = textContent.split(/\n\s*\n/); // Split by empty lines (assumes chapters are separated by double newlines)
+        const chapters = textContent.split(/\n\s*\n/);
 
         const zip = new JSZip();
         zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
@@ -133,9 +132,9 @@
         const tocEntries = [];
 
         chapters.forEach((chapter, index) => {
-          const lines = chapter.trim().split("\n"); // Split chapter into lines
-          const chapterTitle = lines[0]; // First line is the chapter title
-          const chapterContent = lines.slice(1).join("\n"); // Remaining lines are the content
+          const lines = chapter.trim().split("\n");
+          const chapterTitle = lines[0];
+          const chapterContent = lines.slice(1).join("\n");
           const chapterFileName = `chapter_${index + 1}.xhtml`;
 
           textFolder.file(chapterFileName, `
@@ -197,13 +196,16 @@
           </ncx>
         `.trim());
 
-        // Generate the EPUB file
         zip.generateAsync({ type: "blob" }).then(function (blob) {
           const downloadLink = document.createElement("a");
           downloadLink.href = URL.createObjectURL(blob);
-          downloadLink.download = `${fileName}.epub`;
-          downloadLink.click();
+          downloadLink.download = `${fileName}.epub.zip`;
 
+          // Rename logic
+          const finalFileName = downloadLink.download.replace('.zip', '');
+          downloadLink.download = finalFileName;
+
+          downloadLink.click();
           debugOutput.textContent = "EPUB generated successfully.\nChapters:\n" + chapters.map((chapter, index) => `Chapter ${index + 1}: ${chapter.split("\n")[0]}`).join("\n");
         });
       };
