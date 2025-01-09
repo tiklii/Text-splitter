@@ -196,11 +196,13 @@
           </ncx>
         `.trim());
 
+        // Generate EPUB as a ZIP file
         zip.generateAsync({ type: "blob" }).then(function (blob) {
           const downloadLink = document.createElement("a");
           downloadLink.href = URL.createObjectURL(blob);
-          // Ensure the download link has the correct file extension
-          const finalFileName = `${fileName}.epub`; // Ensure it always has the correct .epub extension
+
+          // Correct the filename to have .epub extension (even though the file is a ZIP internally)
+          const finalFileName = `${fileName}.epub`; 
           downloadLink.download = finalFileName;
 
           // Trigger the download
@@ -216,4 +218,3 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </body>
 </html>
-    
