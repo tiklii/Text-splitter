@@ -199,13 +199,13 @@
         zip.generateAsync({ type: "blob" }).then(function (blob) {
           const downloadLink = document.createElement("a");
           downloadLink.href = URL.createObjectURL(blob);
-          downloadLink.download = `${fileName}.epub.zip`;
-
-          // Rename logic
-          const finalFileName = downloadLink.download.replace('.zip', '');
+          // Ensure the download link has the correct file extension
+          const finalFileName = `${fileName}.epub`; // Ensure it always has the correct .epub extension
           downloadLink.download = finalFileName;
 
+          // Trigger the download
           downloadLink.click();
+
           debugOutput.textContent = "EPUB generated successfully.\nChapters:\n" + chapters.map((chapter, index) => `Chapter ${index + 1}: ${chapter.split("\n")[0]}`).join("\n");
         });
       };
@@ -216,3 +216,4 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </body>
 </html>
+    
