@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,26 +10,33 @@
       font-family: Arial, sans-serif;
       padding: 20px;
     }
+
     .form-group {
       margin-bottom: 15px;
     }
+
     label {
       font-weight: bold;
     }
-    input, button {
+
+    input,
+    button {
       padding: 10px;
       font-size: 16px;
       width: 100%;
     }
+
     button {
       cursor: pointer;
       background-color: #007BFF;
       color: white;
       border: none;
     }
+
     button:hover {
       background-color: #0056b3;
     }
+
     .debug-output {
       margin-top: 20px;
       padding: 10px;
@@ -38,9 +46,20 @@
       white-space: pre-wrap;
       max-height: 300px;
       overflow-y: auto;
+      position: relative;
+    }
+
+    .debug-output button {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      width: auto;
+      padding: 5px 10px;
+      font-size: 12px;
     }
   </style>
 </head>
+
 <body>
   <h1>TXT to EPUB Converter (EPUB 2)</h1>
   <form id="epubForm">
@@ -62,17 +81,20 @@
     </div>
     <button type="button" id="convert">Convert to EPUB</button>
   </form>
-  <div id="debugOutput" class="debug-output"></div>
+  <div id="debugOutput" class="debug-output">
+    <button id="copyDebug">Copy Logs</button>
+  </div>
 
+  <script src="./script/jszip.min.js"></script>
   <script>
-    document.getElementById('upload').addEventListener('change', function () {
+    document.getElementById('upload').addEventListener('change', function() {
       const file = this.files[0];
       if (file) {
         const fileNameWithoutExtension = file.name.replace(/\.[^/.]+$/, "");
         document.getElementById('fileName').value = fileNameWithoutExtension;
 
         const reader = new FileReader();
-        reader.onload = function (event) {
+        reader.onload = function(event) {
           const content = event.target.result;
           const firstPart = content.split(/\n\s*\n/)[0];
           const titleMatch = firstPart.match(/《([^》]+)》/);
@@ -89,7 +111,7 @@
       }
     });
 
-    document.getElementById('convert').addEventListener('click', function () {
+    document.getElementById('convert').addEventListener('click', function() {
       const uploadElement = document.getElementById('upload');
       const fileNameElement = document.getElementById('fileName');
       const epubTitleElement = document.getElementById('epubTitle');
@@ -108,12 +130,14 @@
 
       const reader = new FileReader();
 
-      reader.onload = function (event) {
+      reader.onload = function(event) {
         const textContent = event.target.result;
         const chapters = textContent.split(/\n\s*\n/);
 
         const zip = new JSZip();
-        zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
+        zip.file("mimetype", "application/epub+zip", {
+          compression: "STORE"
+        });
 
         const metaInfFolder = zip.folder("META-INF");
         metaInfFolder.file("container.xml", `
@@ -151,7 +175,9 @@
             </html>
           `.trim());
 
-          manifestItems.push(`<item id="chapter_${index + 1}" href="Text/${chapterFileName}" media-type="application/xhtml+xml"/>`);
+          manifestItems.push(
+            `<item id="chapter_${index + 1}" href="Text/${chapterFileName}" media-type="application/xhtml+xml"/>`
+          );
           spineItems.push(`<itemref idref="chapter_${index + 1}"/>`);
           tocEntries.push(`
             <navPoint id="navpoint-${index + 1}" playOrder="${index + 1}">
@@ -197,24 +223,53 @@
         `.trim());
 
         // Generate EPUB as a ZIP file
-        zip.generateAsync({ type: "blob" }).then(function (blob) {
+        zip.generateAsync({
+          type: "blob",
+          mimeType: "application/epub+zip" // Specify the correct MIME type
+        }).then(function(blob) {
+          // Attempt to force the .epub extension
           const downloadLink = document.createElement("a");
           downloadLink.href = URL.createObjectURL(blob);
+          downloadLink.download = `${fileName}.epub`; // Set the desired filename
 
-          // Correct the filename to have .epub extension (even though the file is a ZIP internally)
-          const finalFileName = `${fileName}.epub`; 
-          downloadLink.download = finalFileName;
+          document.body.appendChild(downloadLink); // Append to the document
+          downloadLink.click(); // Programmatically click the link
+          document.body.removeChild(downloadLink); // Remove from the document
 
-          // Trigger the download
-          downloadLink.click();
-
-          debugOutput.textContent = "EPUB generated successfully.\nChapters:\n" + chapters.map((chapter, index) => `Chapter ${index + 1}: ${chapter.split("\n")[0]}`).join("\n");
+          debugOutput.textContent =
+            "EPUB generated successfully.\nChapters:\n" +
+            chapters
+            .map((chapter, index) => `Chapter ${index + 1}: ${chapter.split("\n")[0]}`)
+            .join("\n");
+        }).catch(err => {
+          debugOutput.textContent = "Error generating EPUB: " + err.message;
+          console.error("EPUB generation error:", err); // Log the error to the console for detailed debugging
         });
       };
 
       reader.readAsText(file);
     });
+
+    document.getElementById('copyDebug').addEventListener('click', function() {
+      const debugOutput = document.getElementById('debugOutput');
+      const text = debugOutput.textContent;
+
+      navigator.clipboard.writeText(text)
+        .then(() => {
+          alert('Debug output copied to clipboard!');
+        })
+        .catch(err => {
+          console.error('Failed to copy: ', err);
+          alert('Failed to copy debug output to clipboard.');
+        });
+    });
   </script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </body>
+
+</html>
+  });
+    });
+  </script>
+</body>
+
 </html>
