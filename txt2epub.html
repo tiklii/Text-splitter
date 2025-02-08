@@ -23,7 +23,7 @@
     button {
       padding: 10px;
       font-size: 16px;
-      width: 100%;
+      width: calc(100% - 20px);
     }
 
     button {
@@ -46,16 +46,11 @@
       white-space: pre-wrap;
       max-height: 300px;
       overflow-y: auto;
-      position: relative;
     }
 
-    .debug-output button {
-      position: absolute;
-      top: 5px;
-      right: 5px;
-      width: auto;
-      padding: 5px 10px;
-      font-size: 12px;
+    input {
+      margin-right: 10px;
+      /* Add right margin to input boxes */
     }
   </style>
 </head>
@@ -81,11 +76,10 @@
     </div>
     <button type="button" id="convert">Convert to EPUB</button>
   </form>
-  <div id="debugOutput" class="debug-output">
-    <button id="copyDebug">Copy Logs</button>
-  </div>
 
-  <script src="./script/jszip.min.js"></script>
+  <div id="debugOutput" class="debug-output"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script>
     document.getElementById('upload').addEventListener('change', function() {
       const file = this.files[0];
@@ -117,6 +111,7 @@
       const epubTitleElement = document.getElementById('epubTitle');
       const epubAuthorElement = document.getElementById('epubAuthor');
       const debugOutput = document.getElementById('debugOutput');
+      debugOutput.textContent = ""; // Clear previous logs
 
       if (!uploadElement.files.length) {
         alert("Please upload a TXT file.");
@@ -236,40 +231,26 @@
           downloadLink.click(); // Programmatically click the link
           document.body.removeChild(downloadLink); // Remove from the document
 
-          debugOutput.textContent =
-            "EPUB generated successfully.\nChapters:\n" +
-            chapters
-            .map((chapter, index) => `Chapter ${index + 1}: ${chapter.split("\n")[0]}`)
-            .join("\n");
+          // Append logs incrementally
+          debugOutput.textContent += "EPUB generated successfully.\n";
+          debugOutput.textContent += "Chapters:\n";
+          chapters.forEach((chapter, index) => {
+            debugOutput.textContent += `Chapter ${index + 1}: ${chapter.split("\n")[0]}\n`;
+          });
+
         }).catch(err => {
-          debugOutput.textContent = "Error generating EPUB: " + err.message;
+          debugOutput.textContent += "Error generating EPUB: " + err.message;
           console.error("EPUB generation error:", err); // Log the error to the console for detailed debugging
         });
       };
 
       reader.readAsText(file);
     });
-
-    document.getElementById('copyDebug').addEventListener('click', function() {
-      const debugOutput = document.getElementById('debugOutput');
-      const text = debugOutput.textContent;
-
-      navigator.clipboard.writeText(text)
-        .then(() => {
-          alert('Debug output copied to clipboard!');
-        })
-        .catch(err => {
-          console.error('Failed to copy: ', err);
-          alert('Failed to copy debug output to clipboard.');
-        });
-    });
   </script>
 </body>
 
 </html>
-  });
-    });
-  </script>
+</script>
 </body>
 
 </html>
